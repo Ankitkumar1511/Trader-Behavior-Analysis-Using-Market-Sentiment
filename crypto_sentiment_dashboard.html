@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Crypto Market Sentiment & Historical Price Analysis Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.32.0/plotly.min.js"></script>
+<style>
+  :root{
+    --navy:#1155A8; --sky:#2E8BEC; --cyan:#0FA9C4;
+    --white:#FFFFFF; --light:#F1F4F9; --dark:#131A24; --gray:#4B5768; --gray-soft:#8291A3;
+    --green:#1D7A34; --red:#C42B2B; --amber:#B8860B; --orange:#C05A0E; --litegreen:#5C9A2A;
+    --line:#E1E7F0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--light);color:var(--dark);font-size:14px;-webkit-font-smoothing:antialiased;}
+  .app{display:grid;grid-template-columns:250px 1fr;grid-template-rows:auto auto 1fr;min-height:100vh;}
+  header{grid-column:1/3;background:var(--white);padding:16px 26px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);box-shadow:0 2px 10px rgba(17,85,168,0.06);flex-wrap:wrap;gap:10px;}
+  header .titles h1{margin:0;font-size:20px;color:var(--navy);font-weight:700;letter-spacing:-.01em;}
+  header .titles p{margin:4px 0 0;font-size:12.5px;color:var(--gray);}
+  header .actions button{background:var(--navy);color:#fff;border:none;padding:9px 18px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;transition:background .15s;}
+  header .actions button:hover{background:#0D3E7C;}
+  #dyn-title{grid-column:2/3;font-size:12.5px;color:var(--gray);padding:10px 22px 0;font-style:italic;font-weight:600;}
+
+  .sidebar{grid-row:2/4;background:var(--white);border-right:1px solid var(--line);padding:18px;overflow-y:auto;}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-soft);margin:20px 0 9px;font-weight:700;}
+  .sidebar h3:first-child{margin-top:0;}
+  select, .chk-group{width:100%;}
+  select{padding:9px 10px;border-radius:8px;border:1px solid #D3DCE8;background:var(--light);font-size:13px;color:var(--dark);font-weight:500;}
+  select:focus{outline:2px solid var(--sky);outline-offset:1px;}
+  .chk-item{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;color:var(--dark);cursor:pointer;}
+  .chk-item input{accent-color:var(--navy);width:14px;height:14px;cursor:pointer;}
+  .swatch{width:10px;height:10px;border-radius:3px;display:inline-block;flex-shrink:0;}
+  .kpi-row{grid-column:2/3;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;padding:12px 22px 4px;}
+  .kpi{background:var(--white);border-radius:12px;padding:14px 16px;box-shadow:0 4px 14px rgba(17,85,168,0.07);border:1px solid var(--line);display:flex;flex-direction:column;gap:5px;min-height:88px;justify-content:center;}
+  .kpi .lbl-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .kpi .lbl{font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.04em;line-height:1.3;}
+  .kpi .val-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .kpi .val{font-size:22px;font-weight:700;color:var(--navy);line-height:1.1;}
+  .kpi .sublabel{font-size:11.5px;color:var(--gray);font-weight:600;}
+  .kpi .trend{font-size:13px;font-weight:700;}
+  .kpi .trend.up{color:var(--green);} .kpi .trend.down{color:var(--red);}
+  .kpi[title]{cursor:help;}
+
+  .content{grid-column:2/3;padding:10px 22px 26px;display:grid;gap:16px;}
+  .row{display:grid;gap:16px;}
+  .row1{grid-template-columns:1fr;}
+  .row-candle{grid-template-columns:1fr;}
+  .row2{grid-template-columns:1fr 1fr;}
+  .row3{grid-template-columns:1fr 1fr 1fr;}
+  .row4{grid-template-columns:1.3fr 1fr;}
+  @media (max-width:1100px){
+    .row2, .row3, .row4{grid-template-columns:1fr;}
+    .app{grid-template-columns:1fr;}
+    .sidebar{grid-row:auto;border-right:none;border-bottom:1px solid var(--line);}
+  }
+  .card{background:var(--white);border-radius:12px;box-shadow:0 4px 14px rgba(17,85,168,0.06);border:1px solid var(--line);padding:16px 18px;}
+  .card h4{margin:0 0 3px;font-size:14px;color:var(--dark);font-weight:700;}
+  .card .sub{font-size:12px;color:var(--gray);margin:0 0 10px;line-height:1.4;}
+
+  table.ohlc{width:100%;border-collapse:collapse;font-size:13px;}
+  table.ohlc th{background:var(--navy);color:#fff;padding:9px 10px;text-align:right;font-weight:600;position:sticky;top:0;font-size:12px;letter-spacing:.02em;}
+  table.ohlc th:first-child, table.ohlc td:first-child{text-align:left;}
+  table.ohlc td{padding:8px 10px;text-align:right;border-bottom:1px solid #F0F3F7;}
+  table.ohlc tbody tr:nth-child(even){background:#F8FAFD;}
+  table.ohlc tbody tr:hover{background:#EAF2FC;}
+  .tbl-wrap{max-height:250px;overflow-y:auto;border-radius:8px;border:1px solid var(--line);}
+  .pos{color:var(--green);font-weight:700;} .neg{color:var(--red);font-weight:700;}
+  .pill{padding:3px 10px;border-radius:10px;font-size:11px;color:#fff;font-weight:700;white-space:nowrap;}
+
+  .insight-list{list-style:none;margin:0;padding:0;font-size:13.5px;line-height:1.75;}
+  .insight-list li{padding:8px 0 8px 24px;border-bottom:1px dashed var(--line);position:relative;}
+  .insight-list li:last-child{border-bottom:none;}
+  .insight-list li::before{content:"▸";position:absolute;left:2px;top:8px;color:var(--sky);font-weight:700;}
+  .insight-list b{color:var(--navy);}
+  ::-webkit-scrollbar{width:8px;height:8px;} ::-webkit-scrollbar-thumb{background:#C9D5E4;border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="titles">
+      <h1>Crypto Market Sentiment & Historical Price Analysis Dashboard</h1>
+      <p>Historical Market Performance vs Fear &amp; Greed Index — SOL Daily Trading Activity</p>
+    </div>
+    <div class="actions"><button id="resetBtn">Reset Filters</button></div>
+  </header>
+  <div id="dyn-title"></div>
+
+  <aside class="sidebar">
+    <h3>Date Range</h3>
+    <select id="fYear"></select>
+    <h3>Quarter</h3>
+    <select id="fQuarter"><option value="all">All Quarters</option><option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option></select>
+    <h3>Month</h3>
+    <select id="fMonth"></select>
+    <h3>Fear &amp; Greed Classification</h3>
+    <div class="chk-group" id="fClass"></div>
+    <h3>Market Trend</h3>
+    <div class="chk-group" id="fDirection"></div>
+  </aside>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="content">
+    <div class="row row1">
+      <div class="card"><h4 id="mainTrendTitle">Closing Price vs Fear &amp; Greed Index</h4><div class="sub">Price (left axis) and sentiment (right axis) with 30-day moving average. Larger dots mark Extreme Fear / Extreme Greed days. Use the 1M/3M/6M/All buttons or drag the slider to zoom.</div><div id="mainTrend" style="height:380px;"></div></div>
+    </div>
+    <div class="row row-candle">
+      <div class="card"><h4>Candlestick — Open / High / Low / Close</h4><div class="sub">Green body = close above open (price rose that day). Red body = close below open. Thin wick = day's high/low reach. Use the 1M/3M/6M/All buttons or drag the slider below to zoom.</div><div id="candle" style="height:380px;"></div></div>
+    </div>
+    <div class="row row2">
+      <div class="card"><h4>Correlation: Sentiment vs Close</h4><div class="sub" id="corrSub">Trend line fitted across selected days</div><div id="scatter" style="height:290px;"></div></div>
+      <div class="card"><h4 id="volumeTitle">Trading Volume</h4><div class="sub">Colored by market direction (vs 30D MA)</div><div id="volume" style="height:290px;"></div></div>
+    </div>
+    <div class="row row3">
+      <div class="card"><h4>Monthly Performance Heatmap</h4><div class="sub">Average closing price</div><div id="heatmap" style="height:260px;"></div></div>
+      <div class="card"><h4>Sentiment Distribution</h4><div class="sub">Share of trading days by classification</div><div id="donut" style="height:260px;"></div></div>
+      <div class="card"><h4>Daily Return %</h4><div class="sub">Day-over-day % return, most recent days</div><div id="dailyReturn" style="height:260px;"></div></div>
+    </div>
+    <div class="row row4">
+      <div class="card"><h4>Top 10 Highest Trading Volume Days</h4>
+        <div class="tbl-wrap"><table class="ohlc" id="topVolumeTable"></table></div>
+      </div>
+      <div class="card"><h4>Smart Insights</h4><ul class="insight-list" id="insights"></ul></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RAW = [{"date":"2023-12-29","Open":108.85,"High":109.08,"Low":107.82,"Close":108.08,"Volume_Tokens":2790.6,"Volume_USD":303070.04,"Trade_Count":16,"Total_Fees":75.767502,"Net_Closed_PnL":-326.003607,"Daily_Return_Pct":null,"MA_30":108.08,"Fear_Greed_Value":65,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-01-03","Open":96.943,"High":98.047,"Low":96.943,"Close":98.047,"Volume_Tokens":309.16,"Volume_USD":30141.56,"Trade_Count":2,"Total_Fees":7.535388,"Net_Closed_PnL":170.65632,"Daily_Return_Pct":-9.282938564,"MA_30":103.0635,"Fear_Greed_Value":70,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-01-10","Open":97.095,"High":97.39,"Low":97.095,"Close":97.39,"Volume_Tokens":515.1,"Volume_USD":50089.61,"Trade_Count":2,"Total_Fees":12.522402,"Net_Closed_PnL":75.97725,"Daily_Return_Pct":-0.6700867951,"MA_30":101.1723333333,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-01-11","Open":100.87,"High":100.88,"Low":99.834,"Close":99.84,"Volume_Tokens":792.98,"Volume_USD":79580.61,"Trade_Count":7,"Total_Fees":19.895149,"Net_Closed_PnL":-414.129774,"Daily_Return_Pct":2.5156586919,"MA_30":100.83925,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bearish"},{"date":"2024-01-17","Open":98.816,"High":99.418,"Low":98.69,"Close":99.408,"Volume_Tokens":4045.64,"Volume_USD":400914.41,"Trade_Count":28,"Total_Fees":59.72846,"Net_Closed_PnL":846.032043,"Daily_Return_Pct":-0.4326923077,"MA_30":100.553,"Fear_Greed_Value":60,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-01-31","Open":103.8,"High":103.8,"Low":102.56,"Close":102.56,"Volume_Tokens":481.82,"Volume_USD":49714.48,"Trade_Count":4,"Total_Fees":12.428618,"Net_Closed_PnL":-298.4393,"Daily_Return_Pct":3.1707709641,"MA_30":100.8875,"Fear_Greed_Value":60,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-03-15","Open":163.97,"High":164.41,"Low":163.97,"Close":164.35,"Volume_Tokens":304.92,"Volume_USD":50059.63,"Trade_Count":6,"Total_Fees":17.520868,"Net_Closed_PnL":61.8954,"Daily_Return_Pct":60.2476599064,"MA_30":109.9535714286,"Fear_Greed_Value":83,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-03-20","Open":168.78,"High":172.5,"Low":168.78,"Close":172.5,"Volume_Tokens":59.24,"Volume_USD":10108.71,"Trade_Count":2,"Total_Fees":3.538049,"Net_Closed_PnL":110.1864,"Daily_Return_Pct":4.9589291147,"MA_30":117.771875,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-05-23","Open":175.13,"High":175.28,"Low":170.77,"Close":173.24,"Volume_Tokens":319.43,"Volume_USD":55012.24,"Trade_Count":52,"Total_Fees":18.143464,"Net_Closed_PnL":107.424912,"Daily_Return_Pct":0.4289855072,"MA_30":123.935,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-05-29","Open":168.53,"High":168.53,"Low":168.4,"Close":168.4,"Volume_Tokens":5.92,"Volume_USD":997.32,"Trade_Count":3,"Total_Fees":0.349058,"Net_Closed_PnL":-0.3848,"Daily_Return_Pct":-2.7938120526,"MA_30":128.3815,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-06-07","Open":160.23,"High":160.23,"Low":153.21,"Close":159.86,"Volume_Tokens":390.66,"Volume_USD":61435.82,"Trade_Count":27,"Total_Fees":21.502517,"Net_Closed_PnL":371.917542,"Daily_Return_Pct":-5.0712589074,"MA_30":131.2431818182,"Fear_Greed_Value":77,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-06-08","Open":160.68,"High":162.56,"Low":160.52,"Close":162.56,"Volume_Tokens":172.74,"Volume_USD":27847.76,"Trade_Count":16,"Total_Fees":9.746701,"Net_Closed_PnL":81.210069,"Daily_Return_Pct":1.6889778556,"MA_30":133.8529166667,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-06-11","Open":147.52,"High":148.75,"Low":147.52,"Close":148.75,"Volume_Tokens":15.06,"Volume_USD":2230.92,"Trade_Count":2,"Total_Fees":0.780818,"Net_Closed_PnL":9.2619,"Daily_Return_Pct":-8.4953248031,"MA_30":134.9988461538,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-07-15","Open":151.76,"High":151.76,"Low":151.75,"Close":151.75,"Volume_Tokens":200.0,"Volume_USD":30351.0,"Trade_Count":5,"Total_Fees":10.197932,"Net_Closed_PnL":-1.0,"Daily_Return_Pct":2.0168067227,"MA_30":136.1953571429,"Fear_Greed_Value":52,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"},{"date":"2024-07-20","Open":174.55,"High":174.55,"Low":173.54,"Close":173.54,"Volume_Tokens":63.64,"Volume_USD":11076.22,"Trade_Count":4,"Total_Fees":3.876676,"Net_Closed_PnL":32.1382,"Daily_Return_Pct":14.3591433278,"MA_30":138.685,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-07-31","Open":182.58,"High":182.58,"Low":180.8,"Close":180.8,"Volume_Tokens":54.76,"Volume_USD":9948.93,"Trade_Count":7,"Total_Fees":3.482121,"Net_Closed_PnL":48.317486,"Daily_Return_Pct":4.1834735508,"MA_30":141.3171875,"Fear_Greed_Value":61,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-08-01","Open":161.49,"High":161.67,"Low":161.49,"Close":161.67,"Volume_Tokens":27.54,"Volume_USD":4449.9,"Trade_Count":6,"Total_Fees":1.557467,"Net_Closed_PnL":2.4786,"Daily_Return_Pct":-10.5807522124,"MA_30":142.5144117647,"Fear_Greed_Value":52,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"},{"date":"2024-08-02","Open":161.3,"High":163.81,"Low":161.3,"Close":163.81,"Volume_Tokens":30.75,"Volume_USD":4998.28,"Trade_Count":3,"Total_Fees":1.749395,"Net_Closed_PnL":0.0,"Daily_Return_Pct":1.3236840478,"MA_30":143.6975,"Fear_Greed_Value":57,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-08-03","Open":147.45,"High":147.45,"Low":147.45,"Close":147.45,"Volume_Tokens":30.75,"Volume_USD":4534.09,"Trade_Count":1,"Total_Fees":1.58693,"Net_Closed_PnL":464.1897,"Daily_Return_Pct":-9.9871802698,"MA_30":143.895,"Fear_Greed_Value":37,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2024-08-05","Open":137.73,"High":137.73,"Low":134.43,"Close":134.43,"Volume_Tokens":145.38,"Volume_USD":19783.15,"Trade_Count":3,"Total_Fees":6.924099,"Net_Closed_PnL":239.709813,"Daily_Return_Pct":-8.8301119023,"MA_30":143.42175,"Fear_Greed_Value":26,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2024-09-01","Open":131.52,"High":131.52,"Low":130.61,"Close":131.39,"Volume_Tokens":30.44,"Volume_USD":3997.75,"Trade_Count":4,"Total_Fees":1.39921,"Net_Closed_PnL":1.763998,"Daily_Return_Pct":-2.2613999851,"MA_30":142.8488095238,"Fear_Greed_Value":26,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2024-10-29","Open":181.59,"High":181.59,"Low":181.59,"Close":181.59,"Volume_Tokens":5.5,"Volume_USD":998.75,"Trade_Count":1,"Total_Fees":0.34956,"Net_Closed_PnL":0.0,"Daily_Return_Pct":38.2068650582,"MA_30":144.6097727273,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-10-31","Open":176.83,"High":176.84,"Low":174.39,"Close":174.39,"Volume_Tokens":174.88,"Volume_USD":30908.64,"Trade_Count":10,"Total_Fees":10.818025,"Net_Closed_PnL":37.046585,"Daily_Return_Pct":-3.9649760449,"MA_30":145.9045652174,"Fear_Greed_Value":77,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-16","Open":215.87,"High":219.73,"Low":214.66,"Close":214.66,"Volume_Tokens":80.0,"Volume_USD":17343.0,"Trade_Count":16,"Total_Fees":4.980445,"Net_Closed_PnL":142.0365,"Daily_Return_Pct":23.0919204083,"MA_30":148.769375,"Fear_Greed_Value":86,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-17","Open":217.02,"High":237.86,"Low":212.4,"Close":232.29,"Volume_Tokens":1104.07,"Volume_USD":257120.33,"Trade_Count":82,"Total_Fees":44.097264,"Net_Closed_PnL":159.057037,"Daily_Return_Pct":8.212987981,"MA_30":152.1102,"Fear_Greed_Value":90,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-18","Open":236.08,"High":247.46,"Low":235.05,"Close":241.46,"Volume_Tokens":367.75,"Volume_USD":88802.71,"Trade_Count":74,"Total_Fees":31.080926,"Net_Closed_PnL":106.48805,"Daily_Return_Pct":3.9476516423,"MA_30":155.5467307692,"Fear_Greed_Value":83,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-19","Open":238.47,"High":247.5,"Low":235.11,"Close":243.49,"Volume_Tokens":723.58,"Volume_USD":174335.64,"Trade_Count":106,"Total_Fees":59.769059,"Net_Closed_PnL":275.093209,"Daily_Return_Pct":0.8407189597,"MA_30":158.8038888889,"Fear_Greed_Value":90,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-20","Open":243.54,"High":244.37,"Low":231.2,"Close":232.51,"Volume_Tokens":3602.06,"Volume_USD":851569.76,"Trade_Count":302,"Total_Fees":290.352945,"Net_Closed_PnL":-417.123382,"Daily_Return_Pct":-4.5094254384,"MA_30":161.43625,"Fear_Greed_Value":83,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-21","Open":233.08,"High":258.97,"Low":230.8,"Close":258.97,"Volume_Tokens":607.66,"Volume_USD":145684.22,"Trade_Count":102,"Total_Fees":48.548692,"Net_Closed_PnL":161.661152,"Daily_Return_Pct":11.3801556922,"MA_30":164.7994827586,"Fear_Greed_Value":82,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-22","Open":258.85,"High":262.43,"Low":253.35,"Close":253.37,"Volume_Tokens":939.08,"Volume_USD":239576.82,"Trade_Count":50,"Total_Fees":79.825479,"Net_Closed_PnL":-105.383584,"Daily_Return_Pct":-2.1624126347,"MA_30":167.7518333333,"Fear_Greed_Value":94,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-26","Open":239.66,"High":239.66,"Low":223.55,"Close":230.45,"Volume_Tokens":2609.98,"Volume_USD":606007.38,"Trade_Count":88,"Total_Fees":153.730049,"Net_Closed_PnL":1110.9189,"Daily_Return_Pct":-9.046059123,"MA_30":171.8308333333,"Fear_Greed_Value":79,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-27","Open":225.47,"High":241.16,"Low":223.8,"Close":240.05,"Volume_Tokens":703.99,"Volume_USD":162723.85,"Trade_Count":65,"Total_Fees":54.90382,"Net_Closed_PnL":-22.99664,"Daily_Return_Pct":4.1657626383,"MA_30":176.5642666667,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-28","Open":239.81,"High":242.81,"Low":234.54,"Close":236.93,"Volume_Tokens":1760.0,"Volume_USD":420327.56,"Trade_Count":131,"Total_Fees":85.442152,"Net_Closed_PnL":-6142.8565,"Daily_Return_Pct":-1.2997292231,"MA_30":181.2156,"Fear_Greed_Value":77,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-29","Open":236.78,"High":245.14,"Low":234.8,"Close":241.48,"Volume_Tokens":218.0,"Volume_USD":51754.23,"Trade_Count":44,"Total_Fees":16.937818,"Net_Closed_PnL":55.5014,"Daily_Return_Pct":1.9203984299,"MA_30":185.9369333333,"Fear_Greed_Value":78,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-11-30","Open":242.86,"High":244.39,"Low":239.78,"Close":240.02,"Volume_Tokens":110.0,"Volume_USD":26664.9,"Trade_Count":19,"Total_Fees":9.33271,"Net_Closed_PnL":-49.636,"Daily_Return_Pct":-0.6046049362,"MA_30":190.624,"Fear_Greed_Value":84,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-01","Open":240.24,"High":240.24,"Low":235.79,"Close":236.61,"Volume_Tokens":110.03,"Volume_USD":26157.03,"Trade_Count":26,"Total_Fees":8.8597,"Net_Closed_PnL":-12.888413,"Daily_Return_Pct":-1.4207149404,"MA_30":195.0923333333,"Fear_Greed_Value":81,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-02","Open":224.2,"High":226.73,"Low":223.38,"Close":224.74,"Volume_Tokens":20.0,"Volume_USD":4497.26,"Trade_Count":4,"Total_Fees":1.013541,"Net_Closed_PnL":13.26,"Daily_Return_Pct":-5.016694138,"MA_30":197.1053333333,"Fear_Greed_Value":80,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-05","Open":232.89,"High":234.58,"Low":232.87,"Close":234.58,"Volume_Tokens":10.0,"Volume_USD":2337.36,"Trade_Count":5,"Total_Fees":0.818075,"Net_Closed_PnL":8.439,"Daily_Return_Pct":4.3783928095,"MA_30":199.1746666667,"Fear_Greed_Value":84,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-06","Open":243.33,"High":243.33,"Low":232.77,"Close":240.1,"Volume_Tokens":800.0,"Volume_USD":191047.83,"Trade_Count":23,"Total_Fees":35.608006,"Net_Closed_PnL":17.525,"Daily_Return_Pct":2.3531417853,"MA_30":201.4033333333,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2024-12-07","Open":241.55,"High":241.55,"Low":241.55,"Close":241.55,"Volume_Tokens":20.69,"Volume_USD":4997.67,"Trade_Count":2,"Total_Fees":1.749183,"Net_Closed_PnL":0.0,"Daily_Return_Pct":0.6039150354,"MA_30":203.8416666667,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-08","Open":241.9,"High":243.79,"Low":239.14,"Close":241.58,"Volume_Tokens":1072.51,"Volume_USD":258500.4,"Trade_Count":80,"Total_Fees":86.725794,"Net_Closed_PnL":0.0,"Daily_Return_Pct":0.0124197889,"MA_30":206.5656666667,"Fear_Greed_Value":79,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-09","Open":230.66,"High":232.46,"Low":230.55,"Close":232.46,"Volume_Tokens":844.44,"Volume_USD":195738.7,"Trade_Count":21,"Total_Fees":48.934668,"Net_Closed_PnL":467.45985,"Daily_Return_Pct":-3.7751469493,"MA_30":208.8956666667,"Fear_Greed_Value":78,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-12","Open":229.89,"High":233.16,"Low":229.89,"Close":232.5,"Volume_Tokens":591.04,"Volume_USD":136716.75,"Trade_Count":17,"Total_Fees":34.404877,"Net_Closed_PnL":991.3563,"Daily_Return_Pct":0.0172072615,"MA_30":211.6873333333,"Fear_Greed_Value":83,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-18","Open":226.12,"High":226.12,"Low":216.18,"Close":219.03,"Volume_Tokens":513.62,"Volume_USD":116046.85,"Trade_Count":38,"Total_Fees":11.857901,"Net_Closed_PnL":6.151473,"Daily_Return_Pct":-5.7935483871,"MA_30":213.93,"Fear_Greed_Value":81,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2024-12-20","Open":195.2,"High":195.2,"Low":194.36,"Close":194.36,"Volume_Tokens":6.41,"Volume_USD":1248.0,"Trade_Count":2,"Total_Fees":0.419327,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-11.2632972652,"MA_30":214.624,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-21","Open":189.24,"High":197.6,"Low":189.0,"Close":189.0,"Volume_Tokens":16.96,"Volume_USD":3247.14,"Trade_Count":5,"Total_Fees":0.791204,"Net_Closed_PnL":30.844243,"Daily_Return_Pct":-2.7577690883,"MA_30":214.8973333333,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-22","Open":181.63,"High":186.0,"Low":181.63,"Close":186.0,"Volume_Tokens":12.4,"Volume_USD":2274.87,"Trade_Count":5,"Total_Fees":0.680426,"Net_Closed_PnL":75.379898,"Daily_Return_Pct":-1.5873015873,"MA_30":215.7083333333,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-23","Open":184.08,"High":184.08,"Low":184.08,"Close":184.08,"Volume_Tokens":9.63,"Volume_USD":1772.69,"Trade_Count":1,"Total_Fees":0.595623,"Net_Closed_PnL":41.094099,"Daily_Return_Pct":-1.0322580645,"MA_30":216.384,"Fear_Greed_Value":70,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-24","Open":189.75,"High":189.75,"Low":189.75,"Close":189.75,"Volume_Tokens":3.95,"Volume_USD":749.51,"Trade_Count":1,"Total_Fees":0.251835,"Net_Closed_PnL":0.0,"Daily_Return_Pct":3.0801825293,"MA_30":217.794,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-25","Open":193.9,"High":198.0,"Low":193.9,"Close":198.0,"Volume_Tokens":4.87,"Volume_USD":948.43,"Trade_Count":2,"Total_Fees":0.270677,"Net_Closed_PnL":0.0,"Daily_Return_Pct":4.347826087,"MA_30":219.913,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-27","Open":188.81,"High":190.0,"Low":188.81,"Close":190.0,"Volume_Tokens":8.82,"Volume_USD":1673.49,"Trade_Count":2,"Total_Fees":0.562291,"Net_Closed_PnL":24.454738,"Daily_Return_Pct":-4.0404040404,"MA_30":221.8666666667,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-29","Open":197.16,"High":197.16,"Low":196.33,"Close":196.33,"Volume_Tokens":15.23,"Volume_USD":2996.19,"Trade_Count":3,"Total_Fees":1.006717,"Net_Closed_PnL":0.0,"Daily_Return_Pct":3.3315789474,"MA_30":222.358,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-30","Open":190.21,"High":194.54,"Low":190.21,"Close":194.54,"Volume_Tokens":15.23,"Volume_USD":2947.69,"Trade_Count":3,"Total_Fees":0.990421,"Net_Closed_PnL":48.496516,"Daily_Return_Pct":-0.9117302501,"MA_30":223.0296666667,"Fear_Greed_Value":65,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2024-12-31","Open":198.0,"High":198.0,"Low":198.0,"Close":198.0,"Volume_Tokens":12.62,"Volume_USD":2498.76,"Trade_Count":2,"Total_Fees":0.23988,"Net_Closed_PnL":0.0,"Daily_Return_Pct":1.7785545389,"MA_30":222.4743333333,"Fear_Greed_Value":64,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-01","Open":191.31,"High":191.31,"Low":191.31,"Close":191.31,"Volume_Tokens":1.13,"Volume_USD":216.18,"Trade_Count":1,"Total_Fees":0.072636,"Net_Closed_PnL":7.5597,"Daily_Return_Pct":-3.3787878788,"MA_30":221.1083333333,"Fear_Greed_Value":66,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-02","Open":195.53,"High":207.05,"Low":195.53,"Close":207.05,"Volume_Tokens":18.07,"Volume_USD":3617.14,"Trade_Count":5,"Total_Fees":1.22234,"Net_Closed_PnL":14.1778,"Daily_Return_Pct":8.227484188,"MA_30":219.9613333333,"Fear_Greed_Value":70,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-03","Open":207.39,"High":216.8,"Low":207.39,"Close":216.8,"Volume_Tokens":10.67,"Volume_USD":2242.99,"Trade_Count":8,"Total_Fees":0.767563,"Net_Closed_PnL":0.0,"Daily_Return_Pct":4.7090074861,"MA_30":219.0716666667,"Fear_Greed_Value":74,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-04","Open":217.96,"High":217.96,"Low":217.96,"Close":217.96,"Volume_Tokens":6.88,"Volume_USD":1499.57,"Trade_Count":3,"Total_Fees":0.503849,"Net_Closed_PnL":0.0,"Daily_Return_Pct":0.5350553506,"MA_30":218.5866666667,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-05","Open":216.61,"High":216.61,"Low":216.61,"Close":216.61,"Volume_Tokens":1.84,"Volume_USD":398.56,"Trade_Count":1,"Total_Fees":0.133916,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-0.6193797027,"MA_30":217.1746666667,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-06","Open":215.27,"High":215.28,"Low":215.27,"Close":215.28,"Volume_Tokens":2.32,"Volume_USD":499.43,"Trade_Count":2,"Total_Fees":0.167809,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-0.6140067402,"MA_30":215.905,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bearish"},{"date":"2025-01-07","Open":206.59,"High":208.56,"Low":206.06,"Close":206.06,"Volume_Tokens":65.96,"Volume_USD":13668.18,"Trade_Count":8,"Total_Fees":4.689225,"Net_Closed_PnL":31.626913,"Daily_Return_Pct":-4.2827945002,"MA_30":215.092,"Fear_Greed_Value":78,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bearish"},{"date":"2025-01-08","Open":204.56,"High":204.56,"Low":189.06,"Close":196.48,"Volume_Tokens":191.58,"Volume_USD":37639.14,"Trade_Count":55,"Total_Fees":13.173676,"Net_Closed_PnL":91.991034,"Daily_Return_Pct":-4.649131321,"MA_30":213.6396666667,"Fear_Greed_Value":70,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-09","Open":194.03,"High":195.61,"Low":194.03,"Close":194.7,"Volume_Tokens":46.51,"Volume_USD":9056.11,"Trade_Count":9,"Total_Fees":3.159136,"Net_Closed_PnL":27.751187,"Daily_Return_Pct":-0.9059446254,"MA_30":212.232,"Fear_Greed_Value":69,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-10","Open":188.26,"High":192.0,"Low":184.59,"Close":191.86,"Volume_Tokens":19.34,"Volume_USD":3647.83,"Trade_Count":6,"Total_Fees":1.147308,"Net_Closed_PnL":35.836235,"Daily_Return_Pct":-1.45865434,"MA_30":210.578,"Fear_Greed_Value":50,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-01-11","Open":185.49,"High":185.49,"Low":185.49,"Close":185.49,"Volume_Tokens":5.21,"Volume_USD":966.41,"Trade_Count":2,"Total_Fees":0.33824,"Net_Closed_PnL":33.1877,"Daily_Return_Pct":-3.3201292609,"MA_30":208.7603333333,"Fear_Greed_Value":69,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-12","Open":191.61,"High":191.61,"Low":191.61,"Close":191.61,"Volume_Tokens":1.15,"Volume_USD":220.35,"Trade_Count":1,"Total_Fees":0.077123,"Net_Closed_PnL":0.0,"Daily_Return_Pct":3.2993692382,"MA_30":207.2603333333,"Fear_Greed_Value":62,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-13","Open":178.95,"High":178.97,"Low":175.41,"Close":178.97,"Volume_Tokens":19.99,"Volume_USD":3554.48,"Trade_Count":6,"Total_Fees":1.244062,"Net_Closed_PnL":37.678506,"Daily_Return_Pct":-6.5967329471,"MA_30":205.7346666667,"Fear_Greed_Value":61,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-14","Open":175.51,"High":190.0,"Low":175.51,"Close":189.78,"Volume_Tokens":10.35,"Volume_USD":1930.86,"Trade_Count":7,"Total_Fees":0.476859,"Net_Closed_PnL":46.901831,"Daily_Return_Pct":6.0401184556,"MA_30":204.2413333333,"Fear_Greed_Value":63,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-15","Open":187.56,"High":192.0,"Low":187.29,"Close":192.0,"Volume_Tokens":13.82,"Volume_USD":2620.65,"Trade_Count":5,"Total_Fees":0.588209,"Net_Closed_PnL":22.508026,"Daily_Return_Pct":1.1697755296,"MA_30":202.638,"Fear_Greed_Value":70,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-01-16","Open":202.69,"High":210.0,"Low":202.69,"Close":210.0,"Volume_Tokens":15.3,"Volume_USD":3144.47,"Trade_Count":5,"Total_Fees":0.577478,"Net_Closed_PnL":0.0,"Daily_Return_Pct":9.375,"MA_30":201.5863333333,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-18","Open":227.5,"High":235.96,"Low":220.75,"Close":235.54,"Volume_Tokens":37.73,"Volume_USD":8635.4,"Trade_Count":7,"Total_Fees":2.888793,"Net_Closed_PnL":-87.928104,"Daily_Return_Pct":12.1619047619,"MA_30":201.385,"Fear_Greed_Value":77,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-19","Open":257.21,"High":279.38,"Low":254.65,"Close":268.48,"Volume_Tokens":12516.46,"Volume_USD":3415820.54,"Trade_Count":416,"Total_Fees":369.583984,"Net_Closed_PnL":-425.354958,"Daily_Return_Pct":13.9848857943,"MA_30":202.5856666667,"Fear_Greed_Value":77,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-20","Open":268.48,"High":268.48,"Low":234.0,"Close":245.89,"Volume_Tokens":2114.07,"Volume_USD":507101.68,"Trade_Count":68,"Total_Fees":29.824427,"Net_Closed_PnL":40769.290515,"Daily_Return_Pct":-8.414034565,"MA_30":203.032,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-21","Open":248.19,"High":249.47,"Low":247.98,"Close":249.47,"Volume_Tokens":7.32,"Volume_USD":1819.94,"Trade_Count":3,"Total_Fees":0.62699,"Net_Closed_PnL":10.082072,"Daily_Return_Pct":1.455935581,"MA_30":204.0466666667,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-22","Open":255.65,"High":264.37,"Low":255.22,"Close":264.37,"Volume_Tokens":16.44,"Volume_USD":4287.59,"Trade_Count":9,"Total_Fees":1.48909,"Net_Closed_PnL":-8.575004,"Daily_Return_Pct":5.9726620435,"MA_30":206.3803333333,"Fear_Greed_Value":84,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-23","Open":271.2,"High":271.2,"Low":244.21,"Close":246.36,"Volume_Tokens":78.1,"Volume_USD":19534.2,"Trade_Count":16,"Total_Fees":6.836963,"Net_Closed_PnL":453.946488,"Daily_Return_Pct":-6.8124219843,"MA_30":208.2923333333,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-24","Open":269.87,"High":269.87,"Low":269.87,"Close":269.87,"Volume_Tokens":2.05,"Volume_USD":553.23,"Trade_Count":1,"Total_Fees":0.193631,"Net_Closed_PnL":0.0,"Daily_Return_Pct":9.5429452833,"MA_30":211.088,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-25","Open":252.02,"High":252.02,"Low":252.02,"Close":252.02,"Volume_Tokens":2.05,"Volume_USD":516.64,"Trade_Count":1,"Total_Fees":0.180824,"Net_Closed_PnL":36.5925,"Daily_Return_Pct":-6.614295772,"MA_30":213.3526666667,"Fear_Greed_Value":75,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-01-26","Open":255.33,"High":258.0,"Low":254.8,"Close":256.58,"Volume_Tokens":162.17,"Volume_USD":41567.86,"Trade_Count":24,"Total_Fees":4.131238,"Net_Closed_PnL":96.0,"Daily_Return_Pct":1.8093802079,"MA_30":215.5803333333,"Fear_Greed_Value":73,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-01-27","Open":235.57,"High":235.57,"Low":225.93,"Close":229.69,"Volume_Tokens":63.85,"Volume_USD":14479.73,"Trade_Count":8,"Total_Fees":2.197696,"Net_Closed_PnL":57.129968,"Daily_Return_Pct":-10.4801621327,"MA_30":216.6366666667,"Fear_Greed_Value":71,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-01-28","Open":240.2,"High":240.2,"Low":237.79,"Close":237.79,"Volume_Tokens":300.0,"Volume_USD":71698.52,"Trade_Count":48,"Total_Fees":6.883022,"Net_Closed_PnL":899.79,"Daily_Return_Pct":3.5264922287,"MA_30":218.2296666667,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-01-29","Open":228.6,"High":228.6,"Low":228.6,"Close":228.6,"Volume_Tokens":2.42,"Volume_USD":553.21,"Trade_Count":2,"Total_Fees":0.193623,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-3.8647546154,"MA_30":219.3053333333,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-01-31","Open":239.16,"High":240.71,"Low":239.16,"Close":240.71,"Volume_Tokens":4.72,"Volume_USD":1132.4,"Trade_Count":3,"Total_Fees":0.396338,"Net_Closed_PnL":25.5552,"Daily_Return_Pct":5.2974628171,"MA_30":220.8443333333,"Fear_Greed_Value":76,"Fear_Greed_Classification":"Extreme Greed","Market_Direction":"Bullish"},{"date":"2025-02-01","Open":230.55,"High":230.55,"Low":227.4,"Close":227.4,"Volume_Tokens":4.74,"Volume_USD":1085.12,"Trade_Count":3,"Total_Fees":0.379791,"Net_Closed_PnL":23.368,"Daily_Return_Pct":-5.5294753022,"MA_30":221.8243333333,"Fear_Greed_Value":68,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-02-02","Open":217.44,"High":217.44,"Low":201.21,"Close":201.27,"Volume_Tokens":27.0,"Volume_USD":5515.97,"Trade_Count":13,"Total_Fees":1.930585,"Net_Closed_PnL":24.3024,"Daily_Return_Pct":-11.4907651715,"MA_30":222.1563333333,"Fear_Greed_Value":60,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-02-03","Open":198.3,"High":200.72,"Low":190.89,"Close":200.22,"Volume_Tokens":2277.9,"Volume_USD":447002.84,"Trade_Count":50,"Total_Fees":84.656659,"Net_Closed_PnL":78923.254113,"Daily_Return_Pct":-0.5216872857,"MA_30":221.9286666667,"Fear_Greed_Value":44,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-02-04","Open":210.88,"High":211.0,"Low":202.69,"Close":211.0,"Volume_Tokens":14800.0,"Volume_USD":3072517.6499999999,"Trade_Count":277,"Total_Fees":363.907741,"Net_Closed_PnL":397658.512093,"Daily_Return_Pct":5.3840775147,"MA_30":221.7353333333,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-02-09","Open":197.97,"High":200.95,"Low":197.97,"Close":198.33,"Volume_Tokens":3557.61,"Volume_USD":709718.64,"Trade_Count":104,"Total_Fees":212.971062,"Net_Closed_PnL":1259.5314,"Daily_Return_Pct":-6.0047393365,"MA_30":221.081,"Fear_Greed_Value":46,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-10","Open":194.79,"High":203.94,"Low":193.69,"Close":203.94,"Volume_Tokens":47.79,"Volume_USD":9303.64,"Trade_Count":10,"Total_Fees":3.256262,"Net_Closed_PnL":-18.180539,"Daily_Return_Pct":2.8286189684,"MA_30":220.6586666667,"Fear_Greed_Value":43,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-02-12","Open":196.29,"High":196.31,"Low":196.29,"Close":196.31,"Volume_Tokens":2.18,"Volume_USD":427.94,"Trade_Count":2,"Total_Fees":0.149775,"Net_Closed_PnL":12.486968,"Daily_Return_Pct":-3.7412964597,"MA_30":220.0263333333,"Fear_Greed_Value":46,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-13","Open":196.31,"High":196.31,"Low":192.94,"Close":192.94,"Volume_Tokens":2.26,"Volume_USD":439.85,"Trade_Count":2,"Total_Fees":0.153947,"Net_Closed_PnL":3.8081,"Daily_Return_Pct":-1.7166726096,"MA_30":219.589,"Fear_Greed_Value":50,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-14","Open":196.16,"High":196.16,"Low":196.16,"Close":196.16,"Volume_Tokens":2.82,"Volume_USD":553.17,"Trade_Count":1,"Total_Fees":0.193609,"Net_Closed_PnL":0.0,"Daily_Return_Pct":1.6689126153,"MA_30":219.5783333333,"Fear_Greed_Value":48,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-15","Open":196.46,"High":196.46,"Low":196.46,"Close":196.46,"Volume_Tokens":2.82,"Volume_USD":554.02,"Trade_Count":1,"Total_Fees":0.193906,"Net_Closed_PnL":-0.846,"Daily_Return_Pct":0.1529363785,"MA_30":219.637,"Fear_Greed_Value":50,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-17","Open":183.32,"High":183.33,"Low":183.31,"Close":183.33,"Volume_Tokens":27.27,"Volume_USD":4999.01,"Trade_Count":3,"Total_Fees":1.74965,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-6.6832943093,"MA_30":219.3526666667,"Fear_Greed_Value":51,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-18","Open":165.69,"High":165.69,"Low":164.97,"Close":164.97,"Volume_Tokens":57.55,"Volume_USD":9516.09,"Trade_Count":4,"Total_Fees":3.330627,"Net_Closed_PnL":480.636477,"Daily_Return_Pct":-10.0147275405,"MA_30":218.6686666667,"Fear_Greed_Value":47,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-19","Open":165.48,"High":170.84,"Low":165.0,"Close":165.83,"Volume_Tokens":41.51,"Volume_USD":6895.07,"Trade_Count":11,"Total_Fees":2.266708,"Net_Closed_PnL":0.0,"Daily_Return_Pct":0.5213069043,"MA_30":217.8093333333,"Fear_Greed_Value":44,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-02-20","Open":168.06,"High":168.06,"Low":168.06,"Close":168.06,"Volume_Tokens":1.13,"Volume_USD":189.91,"Trade_Count":1,"Total_Fees":0.063808,"Net_Closed_PnL":0.335497,"Daily_Return_Pct":1.3447506483,"MA_30":217.4456666667,"Fear_Greed_Value":49,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-21","Open":174.41,"High":174.41,"Low":174.41,"Close":174.41,"Volume_Tokens":2.34,"Volume_USD":408.12,"Trade_Count":2,"Total_Fees":0.137127,"Net_Closed_PnL":15.553746,"Daily_Return_Pct":3.7784124717,"MA_30":216.9333333333,"Fear_Greed_Value":55,"Fear_Greed_Classification":"Greed","Market_Direction":"Bearish"},{"date":"2025-02-22","Open":170.0,"High":173.4,"Low":167.95,"Close":173.4,"Volume_Tokens":10.72,"Volume_USD":1827.67,"Trade_Count":3,"Total_Fees":0.434166,"Net_Closed_PnL":16.540682,"Daily_Return_Pct":-0.5790952354,"MA_30":216.3133333333,"Fear_Greed_Value":49,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-23","Open":166.77,"High":166.77,"Low":166.66,"Close":166.66,"Volume_Tokens":14.52,"Volume_USD":2420.64,"Trade_Count":3,"Total_Fees":0.847221,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-3.8869665513,"MA_30":214.8686666667,"Fear_Greed_Value":50,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-24","Open":167.91,"High":167.91,"Low":152.14,"Close":154.07,"Volume_Tokens":1443.12,"Volume_USD":224197.49,"Trade_Count":35,"Total_Fees":78.22352,"Net_Closed_PnL":512.041428,"Daily_Return_Pct":-7.5543021721,"MA_30":212.153,"Fear_Greed_Value":49,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-02-25","Open":149.0,"High":152.0,"Low":135.0,"Close":135.0,"Volume_Tokens":3560.06,"Volume_USD":507498.25,"Trade_Count":50,"Total_Fees":76.380686,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-12.377490751,"MA_30":207.7036666667,"Fear_Greed_Value":25,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-02-28","Open":132.0,"High":145.74,"Low":126.73,"Close":145.74,"Volume_Tokens":8341.8,"Volume_USD":1169995.5700000001,"Trade_Count":80,"Total_Fees":353.552549,"Net_Closed_PnL":32855.175856,"Daily_Return_Pct":7.9555555556,"MA_30":204.3653333333,"Fear_Greed_Value":16,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-01","Open":146.64,"High":146.7,"Low":143.45,"Close":143.92,"Volume_Tokens":152.68,"Volume_USD":22086.66,"Trade_Count":11,"Total_Fees":7.673604,"Net_Closed_PnL":354.046836,"Daily_Return_Pct":-1.2487992315,"MA_30":200.847,"Fear_Greed_Value":20,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-02","Open":143.54,"High":173.24,"Low":143.54,"Close":170.52,"Volume_Tokens":11253.55,"Volume_USD":1694512.05,"Trade_Count":152,"Total_Fees":447.751796,"Net_Closed_PnL":30285.20718,"Daily_Return_Pct":18.4824902724,"MA_30":197.7186666667,"Fear_Greed_Value":26,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-03","Open":167.02,"High":178.12,"Low":155.02,"Close":159.24,"Volume_Tokens":15073.36,"Volume_USD":2520105.5699999998,"Trade_Count":282,"Total_Fees":463.464488,"Net_Closed_PnL":313877.794782,"Daily_Return_Pct":-6.615059817,"MA_30":194.8146666667,"Fear_Greed_Value":33,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-04","Open":151.0,"High":151.0,"Low":133.16,"Close":133.59,"Volume_Tokens":20602.85,"Volume_USD":2820102.9100000001,"Trade_Count":162,"Total_Fees":802.748923,"Net_Closed_PnL":4632.925827,"Daily_Return_Pct":-16.1077618689,"MA_30":190.272,"Fear_Greed_Value":15,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-05","Open":143.96,"High":149.0,"Low":142.0,"Close":142.38,"Volume_Tokens":12492.7,"Volume_USD":1776737.2,"Trade_Count":110,"Total_Fees":511.748137,"Net_Closed_PnL":2282.89724,"Daily_Return_Pct":6.5798338199,"MA_30":186.6173333333,"Fear_Greed_Value":20,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-06","Open":144.14,"High":150.08,"Low":143.98,"Close":144.22,"Volume_Tokens":33954.67,"Volume_USD":4998793.0499999998,"Trade_Count":397,"Total_Fees":1015.096419,"Net_Closed_PnL":5515.125125,"Daily_Return_Pct":1.2923163366,"MA_30":182.872,"Fear_Greed_Value":25,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-07","Open":143.07,"High":146.98,"Low":135.66,"Close":143.35,"Volume_Tokens":65759.11,"Volume_USD":9261114.8699999992,"Trade_Count":625,"Total_Fees":2488.82953,"Net_Closed_PnL":3222.198513,"Daily_Return_Pct":-0.6032450423,"MA_30":179.994,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-08","Open":148.86,"High":148.86,"Low":136.0,"Close":136.11,"Volume_Tokens":870.89,"Volume_USD":119943.35,"Trade_Count":57,"Total_Fees":14.13261,"Net_Closed_PnL":52.79008,"Daily_Return_Pct":-5.0505755145,"MA_30":176.6046666667,"Fear_Greed_Value":28,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-09","Open":136.5,"High":138.27,"Low":126.53,"Close":126.79,"Volume_Tokens":67495.35,"Volume_USD":8764049.0500000007,"Trade_Count":645,"Total_Fees":2052.645927,"Net_Closed_PnL":10760.578324,"Daily_Return_Pct":-6.8474028359,"MA_30":173.211,"Fear_Greed_Value":27,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-10","Open":129.5,"High":129.5,"Low":116.86,"Close":117.96,"Volume_Tokens":66540.42,"Volume_USD":8257812.1799999997,"Trade_Count":409,"Total_Fees":1953.22426,"Net_Closed_PnL":9163.142483,"Daily_Return_Pct":-6.9642716303,"MA_30":169.1193333333,"Fear_Greed_Value":20,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-11","Open":116.44,"High":125.75,"Low":113.67,"Close":125.73,"Volume_Tokens":55390.94,"Volume_USD":6669554.1200000001,"Trade_Count":427,"Total_Fees":1445.389891,"Net_Closed_PnL":-59152.696868,"Daily_Return_Pct":6.5869786368,"MA_30":165.7303333333,"Fear_Greed_Value":24,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-03-12","Open":128.01,"High":130.0,"Low":125.85,"Close":130.0,"Volume_Tokens":24634.19,"Volume_USD":3132579.8500000001,"Trade_Count":129,"Total_Fees":775.44502,"Net_Closed_PnL":-1212.262761,"Daily_Return_Pct":3.3961663883,"MA_30":163.3546666667,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-15","Open":133.93,"High":136.0,"Low":132.8,"Close":136.0,"Volume_Tokens":662.71,"Volume_USD":88808.41,"Trade_Count":26,"Total_Fees":17.795119,"Net_Closed_PnL":38948.921228,"Daily_Return_Pct":4.6153846154,"MA_30":161.214,"Fear_Greed_Value":46,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-03-16","Open":136.34,"High":136.34,"Low":128.54,"Close":128.54,"Volume_Tokens":173.42,"Volume_USD":23391.93,"Trade_Count":7,"Total_Fees":3.615401,"Net_Closed_PnL":-6.275232,"Daily_Return_Pct":-5.4852941176,"MA_30":158.4653333333,"Fear_Greed_Value":30,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-17","Open":128.41,"High":128.41,"Low":126.71,"Close":126.71,"Volume_Tokens":14.87,"Volume_USD":1901.18,"Trade_Count":2,"Total_Fees":0.656772,"Net_Closed_PnL":-31.277088,"Daily_Return_Pct":-1.4236813443,"MA_30":156.078,"Fear_Greed_Value":32,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-18","Open":128.5,"High":128.95,"Low":122.43,"Close":122.43,"Volume_Tokens":913.0,"Volume_USD":117462.05,"Trade_Count":9,"Total_Fees":11.905561,"Net_Closed_PnL":63015.976505,"Daily_Return_Pct":-3.3777918081,"MA_30":153.361,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-20","Open":132.0,"High":135.0,"Low":130.74,"Close":130.74,"Volume_Tokens":484.65,"Volume_USD":64937.92,"Trade_Count":6,"Total_Fees":7.337473,"Net_Closed_PnL":-756.946565,"Daily_Return_Pct":6.7875520706,"MA_30":151.1753333333,"Fear_Greed_Value":49,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-03-21","Open":127.44,"High":127.44,"Low":125.63,"Close":125.63,"Volume_Tokens":15.0,"Volume_USD":1894.59,"Trade_Count":9,"Total_Fees":0.663105,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-3.9085207282,"MA_30":148.9316666667,"Fear_Greed_Value":31,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-22","Open":127.62,"High":127.62,"Low":127.62,"Close":127.62,"Volume_Tokens":5.0,"Volume_USD":638.1,"Trade_Count":1,"Total_Fees":0.223335,"Net_Closed_PnL":0.0,"Daily_Return_Pct":1.5840165566,"MA_30":146.647,"Fear_Greed_Value":32,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-23","Open":133.13,"High":133.29,"Low":133.05,"Close":133.16,"Volume_Tokens":93.77,"Volume_USD":12483.02,"Trade_Count":6,"Total_Fees":3.869815,"Net_Closed_PnL":7.175,"Daily_Return_Pct":4.3410123805,"MA_30":144.537,"Fear_Greed_Value":30,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-24","Open":133.0,"High":144.44,"Low":133.0,"Close":141.93,"Volume_Tokens":8480.82,"Volume_USD":1196374.45,"Trade_Count":216,"Total_Fees":160.026179,"Net_Closed_PnL":46170.636797,"Daily_Return_Pct":6.5860618804,"MA_30":143.157,"Fear_Greed_Value":45,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-03-25","Open":142.19,"High":146.0,"Low":138.56,"Close":145.58,"Volume_Tokens":5636.23,"Volume_USD":801507.63,"Trade_Count":78,"Total_Fees":245.088411,"Net_Closed_PnL":33132.604716,"Daily_Return_Pct":2.5716902699,"MA_30":142.5106666667,"Fear_Greed_Value":46,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"},{"date":"2025-03-26","Open":145.11,"High":145.5,"Low":139.5,"Close":139.5,"Volume_Tokens":7014.18,"Volume_USD":1009817.63,"Trade_Count":97,"Total_Fees":251.196236,"Net_Closed_PnL":-108.00218,"Daily_Return_Pct":-4.1763978568,"MA_30":141.633,"Fear_Greed_Value":47,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bearish"},{"date":"2025-03-27","Open":139.05,"High":139.4,"Low":139.05,"Close":139.4,"Volume_Tokens":15.0,"Volume_USD":2087.5,"Trade_Count":3,"Total_Fees":0.730624,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-0.0716845878,"MA_30":140.6776666667,"Fear_Greed_Value":40,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-28","Open":138.97,"High":138.97,"Low":129.0,"Close":129.0,"Volume_Tokens":100.0,"Volume_USD":13247.07,"Trade_Count":11,"Total_Fees":2.327223,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-7.4605451937,"MA_30":139.164,"Fear_Greed_Value":44,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-29","Open":125.53,"High":126.59,"Low":124.67,"Close":124.67,"Volume_Tokens":821.64,"Volume_USD":103441.08,"Trade_Count":8,"Total_Fees":36.204375,"Net_Closed_PnL":314.6728,"Daily_Return_Pct":-3.3565891473,"MA_30":137.5396666667,"Fear_Greed_Value":26,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-30","Open":124.52,"High":125.84,"Low":124.0,"Close":125.84,"Volume_Tokens":266.93,"Volume_USD":33177.95,"Trade_Count":13,"Total_Fees":6.391713,"Net_Closed_PnL":-964.785024,"Daily_Return_Pct":0.9384775808,"MA_30":136.179,"Fear_Greed_Value":32,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-03-31","Open":124.23,"High":126.19,"Low":123.89,"Close":126.18,"Volume_Tokens":66.08,"Volume_USD":8271.06,"Trade_Count":13,"Total_Fees":2.866882,"Net_Closed_PnL":0.0,"Daily_Return_Pct":0.2701843611,"MA_30":135.2493333333,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-01","Open":125.92,"High":125.92,"Low":125.26,"Close":125.26,"Volume_Tokens":10.95,"Volume_USD":1375.52,"Trade_Count":3,"Total_Fees":0.470942,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-0.7291171343,"MA_30":134.9246666667,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-02","Open":124.5,"High":131.18,"Low":124.5,"Close":130.93,"Volume_Tokens":86.02,"Volume_USD":11237.64,"Trade_Count":5,"Total_Fees":3.742802,"Net_Closed_PnL":44.766,"Daily_Return_Pct":4.5265847038,"MA_30":134.431,"Fear_Greed_Value":44,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-03","Open":134.0,"High":134.0,"Low":112.27,"Close":112.27,"Volume_Tokens":8929.92,"Volume_USD":1035728.33,"Trade_Count":77,"Total_Fees":81.553605,"Net_Closed_PnL":86.4425,"Daily_Return_Pct":-14.2518903231,"MA_30":133.376,"Fear_Greed_Value":25,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-04","Open":116.49,"High":122.21,"Low":113.48,"Close":122.19,"Volume_Tokens":2443.84,"Volume_USD":280026.63,"Trade_Count":30,"Total_Fees":84.171753,"Net_Closed_PnL":185.512064,"Daily_Return_Pct":8.8358421662,"MA_30":131.765,"Fear_Greed_Value":28,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-05","Open":123.54,"High":123.74,"Low":120.86,"Close":121.75,"Volume_Tokens":3042.19,"Volume_USD":375510.01,"Trade_Count":83,"Total_Fees":81.738645,"Net_Closed_PnL":23651.723918,"Daily_Return_Pct":-0.3600949341,"MA_30":130.5153333333,"Fear_Greed_Value":30,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-06","Open":119.66,"High":119.66,"Low":108.0,"Close":108.0,"Volume_Tokens":7970.59,"Volume_USD":902832.12,"Trade_Count":99,"Total_Fees":207.538808,"Net_Closed_PnL":237.077001,"Daily_Return_Pct":-11.2936344969,"MA_30":129.6623333333,"Fear_Greed_Value":34,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-07","Open":108.6,"High":108.6,"Low":95.965,"Close":107.54,"Volume_Tokens":12695.94,"Volume_USD":1306237.2,"Trade_Count":246,"Total_Fees":125.546489,"Net_Closed_PnL":-4096.61224,"Daily_Return_Pct":-0.4259259259,"MA_30":128.501,"Fear_Greed_Value":23,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-04-08","Open":105.49,"High":111.94,"Low":103.0,"Close":103.0,"Volume_Tokens":194.21,"Volume_USD":21116.43,"Trade_Count":12,"Total_Fees":6.97722,"Net_Closed_PnL":154.078687,"Daily_Return_Pct":-4.2216849544,"MA_30":127.127,"Fear_Greed_Value":24,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-04-09","Open":102.0,"High":120.2,"Low":102.0,"Close":120.2,"Volume_Tokens":37583.93,"Volume_USD":4197717.5099999998,"Trade_Count":421,"Total_Fees":863.734569,"Net_Closed_PnL":118986.546491,"Daily_Return_Pct":16.6990291262,"MA_30":126.3553333333,"Fear_Greed_Value":18,"Fear_Greed_Classification":"Extreme Fear","Market_Direction":"Bearish"},{"date":"2025-04-10","Open":119.58,"High":120.0,"Low":109.57,"Close":110.4,"Volume_Tokens":30802.29,"Volume_USD":3550482.23,"Trade_Count":243,"Total_Fees":906.355277,"Net_Closed_PnL":83212.870924,"Daily_Return_Pct":-8.153078203,"MA_30":125.4983333333,"Fear_Greed_Value":39,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-11","Open":110.84,"High":122.0,"Low":110.84,"Close":120.53,"Volume_Tokens":17568.03,"Volume_USD":2102637.8799999999,"Trade_Count":111,"Total_Fees":124.793553,"Net_Closed_PnL":115272.173664,"Daily_Return_Pct":9.1757246377,"MA_30":125.2896666667,"Fear_Greed_Value":25,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-12","Open":120.33,"High":130.24,"Low":120.33,"Close":129.07,"Volume_Tokens":6750.38,"Volume_USD":858278.24,"Trade_Count":59,"Total_Fees":169.332864,"Net_Closed_PnL":91.530149,"Daily_Return_Pct":7.0853729362,"MA_30":125.66,"Fear_Greed_Value":43,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-13","Open":131.13,"High":133.69,"Low":128.75,"Close":132.13,"Volume_Tokens":7472.37,"Volume_USD":986860.85,"Trade_Count":154,"Total_Fees":247.893663,"Net_Closed_PnL":1498.610415,"Daily_Return_Pct":2.3708065391,"MA_30":125.8733333333,"Fear_Greed_Value":45,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"},{"date":"2025-04-14","Open":128.45,"High":134.86,"Low":126.77,"Close":129.18,"Volume_Tokens":10092.07,"Volume_USD":1305022.1899999999,"Trade_Count":68,"Total_Fees":134.525569,"Net_Closed_PnL":17082.012268,"Daily_Return_Pct":-2.2326496632,"MA_30":125.846,"Fear_Greed_Value":31,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-15","Open":131.21,"High":133.43,"Low":129.02,"Close":129.02,"Volume_Tokens":49.26,"Volume_USD":6486.81,"Trade_Count":8,"Total_Fees":2.242378,"Net_Closed_PnL":8.661006,"Daily_Return_Pct":-0.1238581824,"MA_30":125.6133333333,"Fear_Greed_Value":38,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-16","Open":127.5,"High":127.5,"Low":125.0,"Close":125.0,"Volume_Tokens":17.75,"Volume_USD":2229.91,"Trade_Count":3,"Total_Fees":0.515977,"Net_Closed_PnL":18.5861,"Daily_Return_Pct":-3.1157960006,"MA_30":125.4953333333,"Fear_Greed_Value":29,"Fear_Greed_Classification":"Fear","Market_Direction":"Bearish"},{"date":"2025-04-17","Open":132.85,"High":134.4,"Low":132.38,"Close":133.44,"Volume_Tokens":1323.1,"Volume_USD":176031.99,"Trade_Count":20,"Total_Fees":31.313699,"Net_Closed_PnL":417.15426,"Daily_Return_Pct":6.752,"MA_30":125.7196666667,"Fear_Greed_Value":30,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-18","Open":134.41,"High":134.41,"Low":133.6,"Close":133.6,"Volume_Tokens":5372.69,"Volume_USD":720318.4399999999,"Trade_Count":53,"Total_Fees":126.66175,"Net_Closed_PnL":-37806.117529,"Daily_Return_Pct":0.1199040767,"MA_30":126.092,"Fear_Greed_Value":33,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-19","Open":137.39,"High":139.66,"Low":137.15,"Close":138.65,"Volume_Tokens":34355.07,"Volume_USD":4752142.04,"Trade_Count":276,"Total_Fees":1189.804684,"Net_Closed_PnL":6965.539102,"Daily_Return_Pct":3.7799401198,"MA_30":126.3556666667,"Fear_Greed_Value":32,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-20","Open":138.65,"High":140.97,"Low":137.49,"Close":137.49,"Volume_Tokens":12703.7,"Volume_USD":1763784.05,"Trade_Count":184,"Total_Fees":401.621111,"Net_Closed_PnL":599.430187,"Daily_Return_Pct":-0.8366390191,"MA_30":126.751,"Fear_Greed_Value":37,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-21","Open":137.22,"High":141.54,"Low":134.95,"Close":134.95,"Volume_Tokens":15425.27,"Volume_USD":2172273.5099999998,"Trade_Count":94,"Total_Fees":500.317106,"Net_Closed_PnL":27079.269025,"Daily_Return_Pct":-1.8474070842,"MA_30":126.9953333333,"Fear_Greed_Value":39,"Fear_Greed_Classification":"Fear","Market_Direction":"Bullish"},{"date":"2025-04-22","Open":136.22,"High":146.2,"Low":136.22,"Close":144.46,"Volume_Tokens":23669.78,"Volume_USD":3343447.5899999999,"Trade_Count":261,"Total_Fees":832.145607,"Net_Closed_PnL":19164.044338,"Daily_Return_Pct":7.0470544646,"MA_30":127.372,"Fear_Greed_Value":47,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"},{"date":"2025-04-23","Open":143.7,"High":152.21,"Low":143.7,"Close":150.6,"Volume_Tokens":13457.58,"Volume_USD":2002181.3799999999,"Trade_Count":147,"Total_Fees":468.855684,"Net_Closed_PnL":-18163.171889,"Daily_Return_Pct":4.2503115049,"MA_30":127.661,"Fear_Greed_Value":72,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-04-24","Open":149.29,"High":151.16,"Low":147.31,"Close":151.16,"Volume_Tokens":5926.88,"Volume_USD":884939.3,"Trade_Count":68,"Total_Fees":221.705838,"Net_Closed_PnL":8536.863424,"Daily_Return_Pct":0.3718459495,"MA_30":127.847,"Fear_Greed_Value":63,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-04-25","Open":150.97,"High":150.97,"Low":150.97,"Close":150.97,"Volume_Tokens":6.62,"Volume_USD":999.42,"Trade_Count":2,"Total_Fees":0.335804,"Net_Closed_PnL":0.0,"Daily_Return_Pct":-0.1256946282,"MA_30":128.2293333333,"Fear_Greed_Value":60,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-04-26","Open":151.39,"High":151.45,"Low":148.59,"Close":148.59,"Volume_Tokens":7026.69,"Volume_USD":1063969.25,"Trade_Count":71,"Total_Fees":245.15024,"Net_Closed_PnL":-0.2562,"Daily_Return_Pct":-1.5764721468,"MA_30":128.5356666667,"Fear_Greed_Value":65,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-04-29","Open":146.5,"High":149.53,"Low":146.48,"Close":149.49,"Volume_Tokens":62573.41,"Volume_USD":9276628.9600000009,"Trade_Count":390,"Total_Fees":2133.640257,"Net_Closed_PnL":61211.926396,"Daily_Return_Pct":0.6056935191,"MA_30":129.2186666667,"Fear_Greed_Value":60,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-04-30","Open":148.49,"High":148.52,"Low":141.87,"Close":145.36,"Volume_Tokens":35517.75,"Volume_USD":5235480.2599999998,"Trade_Count":289,"Total_Fees":1204.767618,"Net_Closed_PnL":61.4938,"Daily_Return_Pct":-2.7627266038,"MA_30":129.9083333333,"Fear_Greed_Value":56,"Fear_Greed_Classification":"Greed","Market_Direction":"Bullish"},{"date":"2025-05-01","Open":145.78,"High":148.97,"Low":145.73,"Close":148.9,"Volume_Tokens":51539.82,"Volume_USD":7633697.1500000004,"Trade_Count":386,"Total_Fees":1775.0747,"Net_Closed_PnL":163004.476514,"Daily_Return_Pct":2.4353329664,"MA_30":130.677,"Fear_Greed_Value":53,"Fear_Greed_Classification":"Neutral","Market_Direction":"Bullish"}];
+
+const CLASS_COLORS = {
+  "Extreme Fear":"#C62828","Fear":"#EF6C00","Neutral":"#F9A825","Greed":"#7CB342","Extreme Greed":"#2E7D32"
+};
+const CLASS_ORDER = ["Extreme Fear","Fear","Neutral","Greed","Extreme Greed"];
+
+RAW.forEach(d=>{ d._date = new Date(d.date); d._year = d._date.getFullYear(); d._month = d._date.getMonth()+1; d._quarter = Math.ceil(d._month/3); });
+RAW.sort((a,b)=>a._date-b._date);
+
+const years = [...new Set(RAW.map(d=>d._year))].sort();
+const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// populate filter controls
+const fYear = document.getElementById('fYear');
+fYear.innerHTML = '<option value="all">All Years</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+const fMonth = document.getElementById('fMonth');
+fMonth.innerHTML = '<option value="all">All Months</option>' + months.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+
+const fClassDiv = document.getElementById('fClass');
+CLASS_ORDER.forEach(c=>{
+  fClassDiv.innerHTML += `<label class="chk-item"><input type="checkbox" value="${c}" checked><span class="swatch" style="background:${CLASS_COLORS[c]}"></span>${c}</label>`;
+});
+const fDirDiv = document.getElementById('fDirection');
+["Bullish","Bearish"].forEach(dir=>{
+  const col = dir==="Bullish" ? "#1565C0" : "#90A4AE";
+  fDirDiv.innerHTML += `<label class="chk-item"><input type="checkbox" value="${dir}" checked><span class="swatch" style="background:${col}"></span>${dir}</label>`;
+});
+
+function getFiltered(){
+  const y = fYear.value, q = document.getElementById('fQuarter').value, m = fMonth.value;
+  const classes = [...fClassDiv.querySelectorAll('input:checked')].map(i=>i.value);
+  const dirs = [...fDirDiv.querySelectorAll('input:checked')].map(i=>i.value);
+  return RAW.filter(d=>
+    (y==="all" || d._year==y) &&
+    (q==="all" || d._quarter==q) &&
+    (m==="all" || d._month==m) &&
+    classes.includes(d.Fear_Greed_Classification) &&
+    dirs.includes(d.Market_Direction)
+  );
+}
+
+function fmt$(v){ return v==null||isNaN(v) ? "—" : "$"+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPct(v){ return v==null||isNaN(v) ? "—" : (v>=0?"+":"")+v.toFixed(2)+"%"; }
+function fmtNum(v){ return v==null||isNaN(v) ? "—" : Math.round(v).toLocaleString(); }
+function stdev(arr){ const m=arr.reduce((a,b)=>a+b,0)/arr.length; return Math.sqrt(arr.reduce((a,b)=>a+(b-m)**2,0)/arr.length); }
+function pearson(xs,ys){
+  const n=xs.length; const mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let num=0,dx=0,dy=0;
+  for(let i=0;i<n;i++){ num += (xs[i]-mx)*(ys[i]-my); dx += (xs[i]-mx)**2; dy += (ys[i]-my)**2; }
+  return num/Math.sqrt(dx*dy);
+}
+function linreg(xs,ys){
+  const n=xs.length; const mx=xs.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let num=0,den=0;
+  for(let i=0;i<n;i++){ num+=(xs[i]-mx)*(ys[i]-my); den+=(xs[i]-mx)**2; }
+  const slope = num/den, intercept = my - slope*mx;
+  return {slope, intercept};
+}
+
+const layoutBase = {
+  font:{family:"Segoe UI, sans-serif", size:12.5, color:"#131A24"},
+  margin:{l:58,r:20,t:14,b:40},
+  paper_bgcolor:"rgba(0,0,0,0)", plot_bgcolor:"rgba(0,0,0,0)",
+  xaxis:{gridcolor:"#EEF2F7", zeroline:false, tickfont:{size:11.5}, automargin:true},
+  yaxis:{gridcolor:"#EEF2F7", zeroline:false, tickfont:{size:11.5}, automargin:true},
+  showlegend:false, hovermode:"closest",
+  hoverlabel:{font:{size:12.5}, bgcolor:"#fff", bordercolor:"#D3DCE8"}
+};
+const cfg = {displayModeBar:true, displaylogo:false, responsive:true,
+  modeBarButtonsToRemove:['lasso2d','select2d','autoScale2d'],
+  toImageButtonOptions:{format:'png', scale:2}};
+
+function render(){
+  const data = getFiltered();
+  const hasData = data.length>0;
+  const dates = data.map(d=>d.date);
+
+  // ---- Dynamic title ----
+  const rangeLabel = hasData
+    ? `${new Date(dates[0]).toLocaleString('en-US',{month:'short',year:'numeric'})} – ${new Date(dates[dates.length-1]).toLocaleString('en-US',{month:'short',year:'numeric'})}`
+    : "";
+  document.getElementById('dyn-title').textContent = hasData
+    ? `Showing ${data.length} trading day${data.length===1?"":"s"} — ${dates[0]} to ${dates[dates.length-1]}`
+    : "No trading days match the current filters";
+  document.getElementById('mainTrendTitle').textContent = hasData
+    ? `Closing Price vs Fear & Greed Index (${rangeLabel})`
+    : "Closing Price vs Fear & Greed Index";
+  document.getElementById('volumeTitle').textContent = hasData
+    ? `Trading Volume (${rangeLabel})`
+    : "Trading Volume";
+
+  // ---- KPIs ----
+  const closes = data.map(d=>d.Close), fgs = data.map(d=>d.Fear_Greed_Value), vols = data.map(d=>d.Volume_USD);
+  const current = hasData ? data[data.length-1].Close : null;
+  const highest = hasData ? Math.max(...closes) : null;
+  const lowest = hasData ? Math.min(...closes) : null;
+  const avgClose = hasData ? closes.reduce((a,b)=>a+b,0)/closes.length : null;
+  const avgVol = hasData ? vols.reduce((a,b)=>a+b,0)/vols.length : null;
+  const maxFG = hasData ? Math.max(...fgs) : null;
+  const minFG = hasData ? Math.min(...fgs) : null;
+  const avgFG = hasData ? fgs.reduce((a,b)=>a+b,0)/fgs.length : null;
+  const totalDays = data.length;
+  let sentLabel = "—";
+  if(hasData){
+    if(avgFG>=75) sentLabel="Extreme Greed"; else if(avgFG>=55) sentLabel="Greed";
+    else if(avgFG>=45) sentLabel="Neutral"; else if(avgFG>=25) sentLabel="Fear"; else sentLabel="Extreme Fear";
+  }
+  const prevClose = hasData && data.length>1 ? data[data.length-2].Close : null;
+  const trendUp = prevClose!==null && current>prevClose;
+  const currentSentiment = hasData ? data[data.length-1].Fear_Greed_Classification : "—";
+  const r = hasData ? pearson(fgs, closes) : 0;
+  function corrLabel(v){
+    if(v >= 0.7) return "Strong Positive";
+    if(v >= 0.4) return "Moderate Positive";
+    if(v > -0.4) return "Weak Correlation";
+    return "Negative Correlation";
+  }
+
+  const kpis = [
+    {lbl:"Closing Price", val: fmt$(current), trend: prevClose!==null ? (trendUp?"▲":"▼"):"", cls: trendUp?"up":"down", tip:"Most recent trading day's closing price in the selected filter window"},
+    {lbl:"Period High", val: fmt$(highest), color:"var(--green)", tip:"Highest close in the selected range"},
+    {lbl:"Period Low", val: fmt$(lowest), color:"var(--red)", tip:"Lowest close in the selected range"},
+    {lbl:"Avg Daily Volume", val: hasData? "$"+fmtNum(avgVol):"—", tip:"Mean daily traded volume in USD"},
+    {lbl:"Avg F&amp;G Score", val: hasData? avgFG.toFixed(1):"—", tip:"Average Fear & Greed sentiment score across the selected range"},
+    {lbl:"Current Sentiment", val: currentSentiment, color: CLASS_COLORS[currentSentiment]||"var(--navy)", tip:"Fear & Greed classification on the most recent trading day"},
+    {lbl:"F&amp;G–Price Corr.", val: hasData? r.toFixed(2):"—", sub: hasData? corrLabel(r):"", color: hasData && r>=0.4 ? "var(--green)" : (hasData && r<=-0.4 ? "var(--red)" : "var(--navy)"), tip:"Pearson correlation coefficient between Fear & Greed Index and closing price"},
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
+    <div class="kpi" title="${k.tip}">
+      <div class="lbl-row">
+        <div class="lbl">${k.lbl}</div>
+        ${k.trend?`<div class="trend ${k.cls}">${k.trend}</div>`:''}
+      </div>
+      <div class="val-row">
+        <div class="val" style="${k.color?`color:${k.color}`:''}">${k.val}</div>
+        ${k.sub?`<div class="sublabel" style="${k.color?`color:${k.color}`:''}">${k.sub}</div>`:''}
+      </div>
+    </div>`).join('');
+
+  if(!hasData){
+    ['mainTrend','candle','scatter','volume','heatmap','donut','dailyReturn'].forEach(id=>Plotly.purge(document.getElementById(id)));
+    document.getElementById('topVolumeTable').innerHTML = "<tr><td style='padding:12px;color:#5F6B7A;'>No data for current filters</td></tr>";
+    document.getElementById('insights').innerHTML = "<li>No trading days match the current filter selection.</li>";
+    return;
+  }
+
+  // ---- Combined dual-axis trend: Close (left) + Fear & Greed (right) ----
+  const extremePoints = data.map((d,i)=> (d.Fear_Greed_Classification==='Extreme Fear' || d.Fear_Greed_Classification==='Extreme Greed') ? i : -1).filter(i=>i>=0);
+  Plotly.react('mainTrend', [
+    {x:dates, y:closes, type:'scatter', mode:'lines', name:'Close', line:{color:'#1565C0', width:2}, yaxis:'y',
+      hovertemplate:'%{x}<br>Close: $%{y:.2f}<extra></extra>'},
+    {x:dates, y:data.map(d=>d.MA_30), type:'scatter', mode:'lines', name:'MA 30D', line:{color:'#90A4AE', width:1.5, dash:'dot'}, yaxis:'y',
+      hovertemplate:'%{x}<br>MA30: $%{y:.2f}<extra></extra>'},
+    {x:dates, y:fgs, type:'scatter', mode:'lines', name:'Fear & Greed', line:{color:'#26C6DA', width:1.5}, yaxis:'y2', opacity:0.85,
+      hovertemplate:'%{x}<br>F&G: %{y}<extra></extra>'},
+    {x:extremePoints.map(i=>dates[i]), y:extremePoints.map(i=>closes[i]), type:'scatter', mode:'markers', name:'Extreme sentiment', yaxis:'y',
+      marker:{size:9, color:extremePoints.map(i=>CLASS_COLORS[data[i].Fear_Greed_Classification]), line:{color:'#fff', width:1}},
+      text:extremePoints.map(i=>data[i].Fear_Greed_Classification),
+      hovertemplate:'%{x}<br>Close: $%{y:.2f}<br>%{text}<extra></extra>'}
+  ], {
+    ...layoutBase, showlegend:true, legend:{orientation:'h', y:1.22, x:0, font:{size:11.5}},
+    margin:{l:56,r:58,t:44,b:36},
+    xaxis:{...layoutBase.xaxis, rangeslider:{visible:true, thickness:0.08},
+      rangeselector:{buttons:[
+        {count:1,label:'1M',step:'month',stepmode:'backward'},
+        {count:3,label:'3M',step:'month',stepmode:'backward'},
+        {count:6,label:'6M',step:'month',stepmode:'backward'},
+        {step:'all',label:'All'}
+      ], font:{size:11}, bgcolor:'#F1F4F9', activecolor:'#BBD6F5', y:1.22, x:1, xanchor:'right'}},
+    yaxis:{...layoutBase.yaxis, title:'Close ($)', tickprefix:'$'},
+    yaxis2:{title:'F&G Score', overlaying:'y', side:'right', range:[0,100], gridcolor:'transparent', tickfont:{size:11.5}, automargin:true}
+  }, cfg);
+
+  // ---- Candlestick ----
+  Plotly.react('candle', [{
+    x:dates, open:data.map(d=>d.Open), high:data.map(d=>d.High), low:data.map(d=>d.Low), close:data.map(d=>d.Close),
+    type:'candlestick',
+    increasing:{line:{color:'#1B5E20', width:1.5}, fillcolor:'#2E7D32'},
+    decreasing:{line:{color:'#7F1D1D', width:1.5}, fillcolor:'#C62828'},
+    whiskerwidth:0.4,
+    hovertext:data.map(d=>`${d.date}<br>Open $${d.Open.toFixed(2)} · High $${d.High.toFixed(2)}<br>Low $${d.Low.toFixed(2)} · Close $${d.Close.toFixed(2)}`),
+    hoverinfo:'text'
+  }], {
+    ...layoutBase,
+    margin:{l:60,r:20,t:36,b:36},
+    xaxis:{...layoutBase.xaxis, rangeslider:{visible:true, thickness:0.09}, gridcolor:'#F0F3F7',
+      rangeselector:{buttons:[
+        {count:1,label:'1M',step:'month',stepmode:'backward'},
+        {count:3,label:'3M',step:'month',stepmode:'backward'},
+        {count:6,label:'6M',step:'month',stepmode:'backward'},
+        {step:'all',label:'All'}
+      ], font:{size:11}, bgcolor:'#F1F4F9', activecolor:'#BBD6F5', y:1.16}},
+    yaxis:{...layoutBase.yaxis, title:'Price ($)', gridcolor:'#EEF2F7', tickprefix:'$'}
+  }, cfg);
+
+  // ---- Scatter correlation ----
+  const {slope, intercept} = linreg(fgs, closes);
+  const xs = [Math.min(...fgs), Math.max(...fgs)];
+  document.getElementById('corrSub').textContent = `Pearson r = ${r.toFixed(2)} (${corrLabel(r)})`;
+  Plotly.react('scatter', [
+    {x:fgs, y:closes, mode:'markers', type:'scatter', marker:{color:'#2E8BEC', size:8, opacity:0.75, line:{color:'#fff',width:0.5}},
+      text:dates, hovertemplate:'%{text}<br>F&G: %{x}<br>Close: $%{y:.2f}<extra></extra>'},
+    {x:xs, y:xs.map(x=>slope*x+intercept), mode:'lines', type:'scatter', name:'Trend', line:{color:'#1155A8', width:2.5, dash:'dash'}, hoverinfo:'skip'}
+  ], {...layoutBase, margin:{...layoutBase.margin, t:18}, xaxis:{...layoutBase.xaxis, title:'Fear & Greed Score'}, yaxis:{...layoutBase.yaxis, title:'Close ($)', tickprefix:'$'}}, cfg);
+
+  // ---- Volume ----
+  Plotly.react('volume', [{
+    x:dates, y:vols, type:'bar', name:'Volume',
+    marker:{color:data.map(d=>d.Market_Direction==='Bullish'?'#1155A8':'#9AA7B7')},
+    text:data.map(d=>`Open $${d.Open.toFixed(2)} · High $${d.High.toFixed(2)} · Low $${d.Low.toFixed(2)} · Close $${d.Close.toFixed(2)}<br>F&G ${d.Fear_Greed_Value} (${d.Fear_Greed_Classification}) · ${fmtPct(d.Daily_Return_Pct)} · ${d.Market_Direction}`),
+    hovertemplate:'%{x}<br>Volume: $%{y:,.0f}<br>%{text}<extra></extra>'
+  }], {...layoutBase, margin:{...layoutBase.margin, t:18}, yaxis:{...layoutBase.yaxis, title:'Volume (USD)'}}, cfg);
+
+  // ---- Monthly Heatmap ----
+  const yrsPresent = [...new Set(data.map(d=>d._year))].sort();
+  const heatZ = months.map((mn,mi)=> yrsPresent.map(yr=>{
+    const rows = data.filter(d=>d._year===yr && d._month===mi+1);
+    return rows.length ? rows.reduce((a,b)=>a+b.Close,0)/rows.length : null;
+  }));
+  Plotly.react('heatmap', [{
+    z:heatZ, x:yrsPresent, y:months, type:'heatmap', colorscale:[[0,'#E3F2FD'],[0.5,'#2E8BEC'],[1,'#0D3E7C']],
+    hovertemplate:'%{y} %{x}<br>Avg Close: $%{z:.2f}<extra></extra>', showscale:true,
+    colorbar:{thickness:10, len:0.9, tickfont:{size:10.5}, tickprefix:'$'}
+  }], {...layoutBase, margin:{l:42,r:44,t:18,b:36}, xaxis:{...layoutBase.xaxis, type:'category'}}, cfg);
+
+  // ---- Donut ----
+  const classCounts = CLASS_ORDER.map(c=>data.filter(d=>d.Fear_Greed_Classification===c).length).map((v,i)=>({c:CLASS_ORDER[i],v})).filter(o=>o.v>0);
+  Plotly.react('donut', [{
+    labels:classCounts.map(o=>o.c), values:classCounts.map(o=>o.v), type:'pie', hole:0.6,
+    marker:{colors:classCounts.map(o=>CLASS_COLORS[o.c]), line:{color:'#fff', width:2}},
+    textinfo:'percent', textfont:{size:12, color:'#fff'}, textposition:'inside',
+    hovertemplate:'%{label}: %{value} days (%{percent})<extra></extra>'
+  }], {...layoutBase, showlegend:true, legend:{orientation:'h', y:-0.12, x:0.5, xanchor:'center', font:{size:11.5}}, margin:{l:10,r:10,t:10,b:34}}, cfg);
+
+  // ---- Daily Return % (bar chart, replaces waterfall) ----
+  const dr = data.filter(d=>d.Daily_Return_Pct!==null).slice(-30);
+  Plotly.react('dailyReturn', [{
+    type:'bar', x:dr.map(d=>d.date), y:dr.map(d=>d.Daily_Return_Pct), name:'Daily Return',
+    marker:{color:dr.map(d=>d.Daily_Return_Pct>=0?'#1D7A34':'#C42B2B')},
+    text:dr.map(d=>`${d.Fear_Greed_Classification} · Close $${d.Close.toFixed(2)}`),
+    hovertemplate:'%{x}<br>%{y:.2f}%<br>%{text}<extra></extra>'
+  }], {...layoutBase, margin:{...layoutBase.margin, t:18}, yaxis:{...layoutBase.yaxis, title:'Daily Return %', ticksuffix:'%'}}, cfg);
+
+  // ---- Top 10 Highest Trading Volume Days ----
+  const top10 = [...data].sort((a,b)=>b.Volume_USD-a.Volume_USD).slice(0,10);
+  let thead = `<tr><th>Date</th><th>Close</th><th>Volume</th><th>F&G</th><th>Daily Return</th><th>Sentiment</th></tr>`;
+  let rowsHtml = top10.map(d=>{
+    const chg = d.Daily_Return_Pct;
+    const chgCls = chg==null? "" : (chg>=0?"pos":"neg");
+    return `<tr>
+      <td>${d.date}</td><td>$${d.Close.toFixed(2)}</td><td>$${fmtNum(d.Volume_USD)}</td><td>${d.Fear_Greed_Value}</td>
+      <td class="${chgCls}">${fmtPct(chg)}</td>
+      <td><span class="pill" style="background:${CLASS_COLORS[d.Fear_Greed_Classification]}">${d.Fear_Greed_Classification}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('topVolumeTable').innerHTML = thead + rowsHtml;
+
+  // ---- Insights (business storytelling) ----
+  const withReturn = data.filter(d=>d.Daily_Return_Pct!==null);
+  const bestDay = withReturn.length ? withReturn.reduce((a,b)=>b.Daily_Return_Pct>a.Daily_Return_Pct?b:a) : null;
+  const worstDay = withReturn.length ? withReturn.reduce((a,b)=>b.Daily_Return_Pct<a.Daily_Return_Pct?b:a) : null;
+  const highestVolDay = data.reduce((a,b)=>b.Volume_USD>a.Volume_USD?b:a);
+  const volMean = vols.reduce((a,b)=>a+b,0)/vols.length, volSd = stdev(vols);
+  const priceVol = stdev(closes);
+
+  const fearDays = withReturn.filter(d=>d.Fear_Greed_Classification==='Fear'||d.Fear_Greed_Classification==='Extreme Fear');
+  const greedDays = withReturn.filter(d=>d.Fear_Greed_Classification==='Greed'||d.Fear_Greed_Classification==='Extreme Greed');
+  const bullishDays = data.filter(d=>d.Market_Direction==='Bullish');
+  const avgReturnFear = fearDays.length ? fearDays.reduce((a,b)=>a+b.Daily_Return_Pct,0)/fearDays.length : null;
+  const avgReturnGreed = greedDays.length ? greedDays.reduce((a,b)=>a+b.Daily_Return_Pct,0)/greedDays.length : null;
+  const avgFGBullish = bullishDays.length ? bullishDays.reduce((a,b)=>a+b.Fear_Greed_Value,0)/bullishDays.length : null;
+  const volFear = fearDays.length>1 ? stdev(fearDays.map(d=>d.Daily_Return_Pct)) : null;
+  const volAll = withReturn.length>1 ? stdev(withReturn.map(d=>d.Daily_Return_Pct)) : null;
+
+  const insights = [
+    (avgReturnFear!==null) ? `Periods of Fear / Extreme Fear averaged <b>${fmtPct(avgReturnFear)}</b> daily return${avgReturnFear<0?" — sentiment dips coincided with price declines":""}.` : null,
+    (avgReturnGreed!==null) ? `Periods of Greed / Extreme Greed averaged <b>${fmtPct(avgReturnGreed)}</b> daily return${avgReturnGreed>0?", consistent with rallies during greed phases":""}.` : null,
+    `Highest trading volume occurred on <b>${highestVolDay.date}</b> ($${fmtNum(highestVolDay.Volume_USD)}, F&G ${highestVolDay.Fear_Greed_Value} — ${highestVolDay.Fear_Greed_Classification}).`,
+    bestDay ? `Largest daily gain: <b>${fmtPct(bestDay.Daily_Return_Pct)}</b> on <b>${bestDay.date}</b>.` : null,
+    worstDay ? `Largest daily loss: <b>${fmtPct(worstDay.Daily_Return_Pct)}</b> on <b>${worstDay.date}</b>.` : null,
+    (avgFGBullish!==null) ? `Average Fear &amp; Greed during Bullish market days was <b>${avgFGBullish.toFixed(1)}</b>.` : null,
+    `Correlation between sentiment and price is <b>${r.toFixed(2)}</b> — a ${corrLabel(r).toLowerCase()}.`,
+    (volFear!==null && volAll!==null) ? `Return volatility during Fear periods (σ = ${volFear.toFixed(1)}%) was ${volFear>volAll?"higher than":"in line with"} the overall period (σ = ${volAll.toFixed(1)}%).` : null,
+  ].filter(Boolean);
+  document.getElementById('insights').innerHTML = insights.map(t=>`<li>${t}</li>`).join('');
+}
+
+[fYear, document.getElementById('fQuarter'), fMonth].forEach(el=>el.addEventListener('change', render));
+[...fClassDiv.querySelectorAll('input'), ...fDirDiv.querySelectorAll('input')].forEach(el=>el.addEventListener('change', render));
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  fYear.value='all'; document.getElementById('fQuarter').value='all'; fMonth.value='all';
+  fClassDiv.querySelectorAll('input').forEach(i=>i.checked=true);
+  fDirDiv.querySelectorAll('input').forEach(i=>i.checked=true);
+  render();
+});
+
+render();
+window.addEventListener('resize', render);
+</script>
+</body>
+</html>
+
