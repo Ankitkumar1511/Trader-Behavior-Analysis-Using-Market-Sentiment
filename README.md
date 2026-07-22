@@ -313,8 +313,6 @@ This project demonstrates a complete end-to-end data analytics workflow by combi
 
 # 👨‍💻 Author
 
-**Name:** Your Name
+**Name:** Ankit kumar
 
-**GitHub:** https://github.com/yourusername
-
-**LinkedIn:** https://linkedin.com/in/yourprofile
+**GitHub:** https://github.com/Ankitkumar1511
